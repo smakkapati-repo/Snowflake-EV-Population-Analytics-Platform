@@ -51,7 +51,7 @@ End-to-end data engineering solution on Snowflake using the Electric Vehicle Pop
 
 ## Running the Pipeline
 
-Execute SQL scripts in order:
+**Initial setup (from scratch):** Execute SQL scripts in order:
 ```
 src/bronze/01_setup.sql → 02_stage_and_load.sql → 03_audit.sql
 src/silver/01_dynamic_table.sql → 02_dq_udf.sql → 03_dq_views.sql
@@ -59,6 +59,11 @@ src/gold/01_dimensions.sql → 02_fact.sql → 03_aggregates.sql → 04_iceberg.
 src/orchestration/01_task_dag.sql
 src/governance/01_rbac_masking.sql
 ```
+
+**Ongoing operation:** Fully automated — no manual intervention needed:
+- Task DAG runs every 6 hours (DQ validation → refresh → metrics logging)
+- Dynamic Tables auto-refresh within 1-hour TARGET_LAG
+- GitHub Actions auto-deploys code changes on merge to main
 
 ## Streamlit App
 
