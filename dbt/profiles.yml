@@ -1,13 +1,15 @@
+# Native Snowflake dbt (Snowsight) uses the session connection automatically.
+# This file is for reference only — credentials are never stored here.
+
 ev_pipeline:
   target: dev
   outputs:
     dev:
       type: snowflake
-      account: oilgylj-qt75521
-      user: SNOWFLAKEDEMO
+      account: "<your_account>"
+      user: "<your_user>"
       role: ACCOUNTADMIN
       database: EV_PIPELINE
       warehouse: EV_WH
       schema: GOLD
       threads: 4
-      authenticator: snowflake
