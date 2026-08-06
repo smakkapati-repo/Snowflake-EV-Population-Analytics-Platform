@@ -1,0 +1,17 @@
+# profiles.yml
+# Native Snowflake dbt (Snowsight) does NOT require this file — connection is automatic.
+# This template is for local dbt CLI development only.
+
+ev_pipeline:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: ACCOUNTADMIN
+      database: EV_PIPELINE
+      warehouse: EV_WH
+      schema: GOLD
+      threads: 4

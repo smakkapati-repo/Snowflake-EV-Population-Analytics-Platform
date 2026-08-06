@@ -1,0 +1,20 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# Credentials
+.env
+*.credentials.json
+
+# Generated docs
+*.docx

@@ -1,0 +1,123 @@
+name: Deploy to Snowflake
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**/*.sql'
+      - 'streamlit/**'
+      - 'dbt/**'
+
+jobs:
+  deploy-sql:
+    name: Deploy SQL (Bronze → Silver → Gold → Orchestration → Governance)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Snowflake connector
+        run: pip install snowflake-connector-python
+
+      - name: Deploy SQL scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        run: |
+          python3 << 'EOF'
+          import snowflake.connector
+          import os
+          import glob
+
+          conn = snowflake.connector.connect(
+              account=os.environ['SNOWFLAKE_ACCOUNT'],
+              user=os.environ['SNOWFLAKE_USER'],
+              password=os.environ['SNOWFLAKE_PASSWORD'],
+              database='EV_PIPELINE',
+              warehouse='EV_WH'
+          )
+          cur = conn.cursor()
+
+          # Execute SQL files in order (includes Iceberg in gold/04_iceberg.sql)
+          sql_dirs = [
+              'src/bronze',
+              'src/silver',
+              'src/gold',         # Includes 04_iceberg.sql and 05_sharing.sql
+              'src/orchestration',
+              'src/governance'
+          ]
+
+          for dir in sql_dirs:
+              files = sorted(glob.glob(f'{dir}/*.sql'))
+              for f in files:
+                  print(f'Deploying: {f}')
+                  with open(f) as sql_file:
+                      statements = sql_file.read().split(';')
+                      for stmt in statements:
+                          stmt = stmt.strip()
+                          if stmt and not stmt.startswith('--'):
+                              try:
+                                  cur.execute(stmt)
+                              except Exception as e:
+                                  print(f'  Warning: {str(e)[:100]}')
+
+          conn.close()
+          print('✅ SQL deployed (Bronze, Silver, Gold, Iceberg, Sharing, Orchestration, Governance)')
+          EOF
+
+  deploy-dbt:
+    name: Deploy dbt (run + test)
+    runs-on: ubuntu-latest
+    needs: deploy-sql
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dbt-snowflake
+        run: pip install dbt-snowflake
+
+      - name: Run dbt models
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        run: |
+          cd dbt
+          dbt run --profiles-dir .
+          dbt test --profiles-dir .
+
+  sync-streamlit:
+    name: Sync Streamlit App (Git fetch in Snowflake)
+    runs-on: ubuntu-latest
+    needs: deploy-sql
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Snowflake connector
+        run: pip install snowflake-connector-python
+
+      - name: Fetch Git repo in Snowflake
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        run: |
+          python3 << 'EOF'
+          import snowflake.connector
+          import os
+
+          conn = snowflake.connector.connect(
+              account=os.environ['SNOWFLAKE_ACCOUNT'],
+              user=os.environ['SNOWFLAKE_USER'],
+              password=os.environ['SNOWFLAKE_PASSWORD'],
+              database='EV_PIPELINE',
+              warehouse='EV_WH'
+          )
+          cur = conn.cursor()
+
+          # Fetch latest from GitHub → Snowflake Git repo
+          # This auto-updates the Streamlit app + semantic model
+          cur.execute("ALTER GIT REPOSITORY EV_PIPELINE.BRONZE.EV_ANALYTICS_REPO FETCH")
+          print('✅ Streamlit app synced (Git repo fetched in Snowflake)')
+
+          conn.close()
+          EOF

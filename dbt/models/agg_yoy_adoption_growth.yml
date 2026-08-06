@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: agg_yoy_adoption_growth
+    description: >
+      Year-over-year EV adoption growth by county. Calculates registration count
+      changes between consecutive years and categorizes growth rate.
+    
+    columns:
+      - name: county
+        description: County where vehicles are registered
+        tests:
+          - not_null
+      
+      - name: model_year
+        description: Vehicle model year
+        tests:
+          - not_null
+      
+      - name: registration_count
+        description: Total EV registrations for this county-year
+        tests:
+          - not_null
+      
+      - name: yoy_growth_pct
+        description: >
+          Year-over-year growth percentage. NULL for first year of data.
+      
+      - name: growth_category
+        description: Human-readable growth classification
+        tests:
+          - accepted_values:
+              values:
+                - 'Explosive (>100%)'
+                - 'High (50-100%)'
+                - 'Moderate (20-50%)'
+                - 'Low (0-20%)'
+                - 'Declining'
+                - 'No Prior Year'
