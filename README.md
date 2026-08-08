@@ -1,113 +1,80 @@
-# Snowflake SI PSE Interview - EV Population Data Pipeline
+# EV Population Analytics Platform — Snowflake
 
-## 🎯 Objective
-Build a comprehensive data engineering solution on Snowflake using the Electric Vehicle Population Dataset, demonstrating medallion architecture, orchestration, open table formats, data sharing, and conversational analytics.
+## Overview
+End-to-end data engineering solution on Snowflake using the Electric Vehicle Population Dataset (22,183 registrations from Washington State). Demonstrates medallion architecture, orchestration, open table formats, data sharing, and conversational analytics powered by Cortex Analyst.
 
-## 📅 Timeline
-- **Received:** Aug 4, 2026
-- **Estimated effort:** 3-5 business days
-- **Deliverables due:** 1 day before panel interview (TBD - awaiting Kaylynn's scheduling email)
-
-## 📁 Project Structure
+## Project Structure
 
 ```
-snowflake-interview/
-├── data/                    # Raw EV population JSON dataset
 ├── src/
-│   ├── bronze/              # Raw data ingestion (Snowpark/SQL)
-│   ├── silver/              # Cleanse, parse, validate, dedup
-│   └── gold/                # Business aggregates, facts, dimensions
-├── dbt/                     # dbt transformations (alternative approach)
-├── streamlit/               # Streamlit apps (insights + chat interface)
-├── tests/                   # Data quality checks
-├── docs/                    # Architecture docs, diagrams, presentation
-│   └── interview_instructions.pdf
-├── .github/workflows/       # CI/CD pipeline
-└── README.md
+│   ├── bronze/              # Raw data ingestion (Stage, COPY INTO, VARIANT)
+│   ├── silver/              # Cleanse, validate, deduplicate (Dynamic Table + Snowpark UDF)
+│   ├── gold/                # Facts, dimensions, aggregates, Iceberg, sharing
+│   ├── orchestration/       # Task DAG (scheduling, DQ gate, alerting)
+│   └── governance/          # RBAC, masking policies, object tags
+├── dbt/                     # dbt model (YoY adoption growth) + tests
+├── streamlit/               # Streamlit app + Cortex Analyst semantic model
+├── docs/                    # Architecture document + diagram
+└── data/                    # Source EV population JSON dataset
 ```
 
-## 🏗️ Architecture Overview
+## Architecture
 
-### Part 1: Data Engineering Pipeline
+![Architecture Diagram](docs/architecture-diagram.png)
 
 | Layer | Purpose | Snowflake Features |
 |-------|---------|-------------------|
-| **Bronze** | Raw ingestion, schema-on-read | Stages, COPY INTO, Variant type, (Bonus: OpenFlow/CDC) |
-| **Silver** | Cleanse, validate, deduplicate | Snowpark Python, Dynamic Tables, Streams |
-| **Gold** | Business aggregates, dimensions, facts | Dynamic Tables, Iceberg Tables, Secure Views |
+| **Bronze** | Raw ingestion, schema-on-read | Internal Stage, COPY INTO, VARIANT |
+| **Silver** | Cleanse, validate, deduplicate | Dynamic Table, Snowpark Python UDF |
+| **Gold** | Business aggregates, facts, dimensions | Dynamic Tables, Iceberg Table, Secure Views |
+| **Analytics** | Conversational natural language queries | Cortex Analyst + Streamlit |
+| **Sharing** | Zero-copy governed data sharing | Secure Share + Reader Account |
+| **Governance** | Access control + classification | RBAC, Dynamic Masking, Object Tags |
 
-### Part 2: Semantic Model + Chat Interface
-- Cortex Analyst semantic model on Gold layer
-- Streamlit chat app for natural language queries
-- Agent integration discussion (Cortex Agents, tool-calling)
+## Key Design Decisions
 
-## ✅ Deliverables Checklist
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Architecture pattern | Medallion (Bronze/Silver/Gold) | Auditability, reprocessability, separation of concerns |
+| Transformation engine | Dynamic Tables + dbt (hybrid) | DTs for declarative auto-refresh; dbt for testable, version-controlled models |
+| Open table format | Iceberg in Gold layer | Multi-engine interop (Spark/Trino/Flink), no lock-in |
+| Data quality | Snowpark Python UDF + SQL assertions | Right-sized for scope; at scale would add Soda/Monte Carlo |
+| Orchestration | Task DAG wrapping Dynamic Tables | DTs = WHAT (transform), Tasks = WHEN/IF (operations) |
+| NL Analytics | Cortex Analyst REST API | Semantic model → SQL generation → governed query execution |
+| Sharing | Secure Share + Secure Views | Zero-copy, instant, governed by provider |
 
-### Part 1 - Data Engineering Pipeline
-- [ ] Analyze dataset fields and document schema
-- [ ] Bronze layer: Ingest raw JSON → Snowflake stage → raw table
-- [ ] Silver layer: Parse, cleanse, validate, deduplicate
-- [ ] Gold layer: Fact tables, dimension tables, aggregates
-- [ ] Dynamic Tables for automated refresh
-- [ ] Iceberg Tables for open table format interoperability
-- [ ] Data quality checks (schema, completeness, uniqueness, referential integrity, business rules, freshness)
-- [ ] Orchestration (Tasks with DAG dependencies, scheduling, error handling)
-- [ ] Data sharing configuration (Secure Share, Listings, Reader accounts)
-- [ ] Bonus: OpenFlow ingestion with Postgres CDC
+## Dataset
 
-### Part 2 - Semantic Model & Analytics
-- [ ] Build semantic model YAML on Gold layer
-- [ ] Streamlit chat interface (Cortex Analyst)
-- [ ] 2-4 insight visualizations (Streamlit or Notebooks)
-- [ ] Discussion prep: Cortex Agents, multi-turn, external integrations
+**Source:** Washington State Department of Licensing  
+**Records:** 22,183 EV registrations  
+**Fields:** VIN, County, City, State, Zip, Model Year, Make, Model, EV Type (BEV/PHEV), CAFV Eligibility, Electric Range, Base MSRP, Legislative District, State Agency Vehicle ID, Lat/Long, Electric Utility, Census Tract
 
-### Presentation & Docs
-- [ ] Architecture diagram (data flow)
-- [ ] Slide deck (10 min overview section)
-- [ ] Demo script (20 min pipeline + 15 min semantic model)
-- [ ] Trade-offs document (alternatives considered)
-- [ ] GitHub repo (clean, documented, CI/CD)
+## Running the Pipeline
 
-## 📊 Dataset Summary
+**Initial setup (from scratch):** Execute SQL scripts in order:
+```
+src/bronze/01_setup.sql → 02_stage_and_load.sql → 03_audit.sql
+src/silver/01_dynamic_table.sql → 02_dq_udf.sql → 03_dq_views.sql
+src/gold/01_dimensions.sql → 02_fact.sql → 03_aggregates.sql → 04_iceberg.sql → 05_sharing.sql
+src/orchestration/01_task_dag.sql
+src/governance/01_rbac_masking.sql
+```
 
-**Source:** Washington State Department of Licensing
-**Format:** JSON (Socrata open data format)
-**Records:** ~22,600 EV registrations
-**Fields to extract:**
-- VIN, County, City, State, Postal Code
-- Model Year, Make, Model
-- Electric Vehicle Type (BEV/PHEV)
-- CAFV Eligibility (Clean Alternative Fuel Vehicle)
-- Electric Range, Base MSRP
-- Legislative District
-- DOL Vehicle ID
-- Vehicle Location (lat/long)
-- Electric Utility
-- 2020 Census Tract
+**Ongoing operation:** Fully automated — no manual intervention needed:
+- Task DAG runs every 6 hours (DQ validation → refresh → metrics logging)
+- Dynamic Tables auto-refresh within 1-hour TARGET_LAG
+- GitHub Actions auto-deploys code changes on merge to main
 
-## 🔑 Key Design Decisions to Document
+## Streamlit App
 
-1. **Why Medallion?** vs. star schema directly, vs. data vault
-2. **Dynamic Tables vs. Tasks+Streams** — when to use each
-3. **Iceberg vs. native tables** — interoperability vs. performance tradeoffs
-4. **dbt vs. Snowpark** — declarative vs. programmatic transformations
-5. **Cost implications** — warehouse sizing, auto-suspend, storage formats
-6. **Data sharing method** — Direct Share vs. Listings vs. Data Exchange
+The Streamlit app provides:
+- **Cortex Analyst chat** — natural language → SQL → results
+- **Executive dashboard** — KPIs, market share, BEV/PHEV split
+- **Regional analysis** — county-level adoption breakdown
+- **Adoption trends** — YoY growth, range improvement, new manufacturers
 
-## 🛠️ Tools & Accounts Needed
+## Documentation
 
-- [ ] Snowflake Trial Account (signup: https://trial.snowflake.com/)
-- [ ] Cortex Code access (signup: https://signup.snowflake.com/cortex-code)
-- [ ] GitHub repository (public, for sharing with panel)
-- [ ] Optional: Postgres instance (for OpenFlow bonus)
-
-## 📺 Presentation Format (60 min)
-
-| Time | Section |
-|------|---------|
-| 10 min | Overview slides: architecture, trade-offs, business value |
-| 20 min | Demo Part 1: Pipeline, orchestration, Iceberg, sharing |
-| 15 min | Demo Part 2: Semantic model + Streamlit chat |
-| 15 min | Q&A from panel |
-
-**Audience:** Technical (Dev, DE, SA, ML Eng) + Business (Director/VP level)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Full architecture document with trade-off analysis
+- [`dbt/README.md`](dbt/README.md) — dbt vs Dynamic Tables design decision
+- [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) — CI/CD pipeline (auto-deploys SQL, dbt, Streamlit on merge)
