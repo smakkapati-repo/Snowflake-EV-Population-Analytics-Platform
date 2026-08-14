@@ -1,0 +1,23 @@
+version: 2
+
+sources:
+  - name: silver
+    database: EV_PIPELINE
+    schema: SILVER
+    tables:
+      - name: ev_registrations
+        description: "Silver layer: cleansed, validated, deduplicated EV registrations"
+        columns:
+          - name: dol_vehicle_id
+            tests:
+              - unique
+              - not_null
+          - name: vin_prefix
+            tests:
+              - not_null
+          - name: model_year
+            tests:
+              - not_null
+          - name: make
+            tests:
+              - not_null

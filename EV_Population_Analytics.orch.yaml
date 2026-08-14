@@ -1,0 +1,107 @@
+type: "orchestration"
+version: "1.0"
+pipeline:
+  components:
+    Start:
+      type: "start"
+      transitions:
+        unconditional:
+        - "PostgreSQL Load"
+      parameters:
+        componentName: "Start"
+      postProcessing:
+        updateOutputMessage:
+        updateScalarVariables:
+        updateGridVariables:
+    PostgreSQL Load:
+      type: "modular-postgresql-input-v1"
+      transitions:
+        success:
+        - "End Success"
+        failure:
+        - "End Failure"
+      parameters:
+        componentName: "PostgreSQL Load"
+        componentId: "modular-postgresql-input-v1"
+        inputId: "postgresql-input-v1"
+        postgresql-input-v1:
+          connection:
+            overrides:
+              authType: "USERNAME_PASSWORD"
+              user: "neondb_owner"
+              password: "${POSTGRES_PASSWORD}"
+              url: "jdbc:postgresql://<your-postgres-host>/neondb"
+          fetchSize:
+          mode: "BASIC"
+          connectionOptions:
+          schema: "public"
+          dataSource: "ev_vehicle_master"
+          dataSelection:
+          - "vehicle_id"
+          - "make"
+          - "model"
+          - "ev_type"
+          - "battery_kwh"
+          - "range_miles"
+          - "msrp_base"
+          - "segment"
+          - "last_updated"
+          dataSourceFilter:
+          combineFilters: "AND"
+          limit:
+          outputEncoding: "CSV"
+          keySanitization: "NONE"
+        outputId: "snowflake-output-connector-v0"
+        dataLoading:
+          loadType: "INCREMENTAL_LOAD"
+          incrementalLoading:
+            highWaterMarkSelection: "last_updated"
+        sshTunnel:
+          id:
+        snowflake-output-connector-v0:
+          warehouse: "COMPUTE_WH"
+          database: "EV_PIPELINE"
+          schema: "BRONZE"
+          tableName: "EV_VEHICLE_MASTER"
+          loadCsvByName: "No"
+          primaryKeys:
+          - "vehicle_id"
+          cleanStagedFiles: "Yes"
+          stagePlatform: "SNOWFLAKE"
+          trimStringColumns: "No"
+          stringNullIsNull: "No"
+          snowflake#internalStageType: "USER"
+      postProcessing:
+        updateOutputMessage:
+        updateScalarVariables:
+        updateGridVariables:
+    End Success:
+      type: "end-success"
+      parameters:
+        componentName: "End Success"
+    End Failure:
+      type: "end-failure"
+      parameters:
+        componentName: "End Failure"
+design:
+  components:
+    Start:
+      position:
+        x: -830
+        "y": -200
+      tempMetlId:
+    PostgreSQL Load:
+      position:
+        x: -550
+        "y": -200
+      tempMetlId:
+    End Success:
+      position:
+        x: -340
+        "y": -290
+      tempMetlId:
+    End Failure:
+      position:
+        x: -320
+        "y": -110
+      tempMetlId:

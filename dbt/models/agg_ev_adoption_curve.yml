@@ -1,0 +1,14 @@
+models:
+  - name: agg_ev_adoption_curve
+    description: "Cumulative EV adoption curve - running total registrations by year with growth phases"
+    columns:
+      - name: model_year
+        tests:
+          - not_null
+          - unique
+      - name: cumulative_registrations
+        tests:
+          - not_null
+      - name: adoption_phase
+        tests:
+          - not_null

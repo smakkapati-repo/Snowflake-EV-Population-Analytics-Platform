@@ -1,0 +1,381 @@
+name: ev_population_analytics
+description: >
+  Semantic model for EV Population Analytics. Enables natural language queries
+  on Washington State electric vehicle registration data including adoption trends,
+  market share, geographic distribution, and utility demand.
+
+tables:
+  - name: AGG_COUNTY_TRENDS
+    description: Pre-aggregated county-level EV adoption trends by model year.
+    base_table:
+      database: EV_PIPELINE
+      schema: GOLD
+      table: AGG_COUNTY_TRENDS
+    primary_key:
+      columns: [county, model_year]
+    dimensions:
+      - name: county
+        synonyms:
+          - region
+          - area
+          - location
+        description: County where vehicles are registered.
+        expr: county
+        data_type: VARCHAR
+      - name: model_year
+        synonyms:
+          - year
+          - registration year
+        description: Model year of the vehicles (used as the time grain).
+        expr: model_year
+        data_type: NUMBER
+      # ─── TIME INTELLIGENCE: Computed dimension ───
+      - name: adoption_era
+        synonyms:
+          - era
+          - adoption phase
+          - period
+          - fiscal year
+        description: >
+          EV adoption era classification based on model year.
+          Post-Mandate (2020+), Growth Era (2015-2019), Early Adoption (pre-2015).
+        expr: "CASE WHEN model_year >= 2020 THEN 'Post-Mandate' WHEN model_year >= 2015 THEN 'Growth Era' ELSE 'Early Adoption' END"
+        data_type: VARCHAR
+    measures:
+      - name: registration_count
+        synonyms:
+          - total registrations
+          - ev count
+          - number of evs
+        description: Total number of EV registrations in that county and year.
+        expr: registration_count
+        default_aggregation: sum
+        data_type: NUMBER
+      - name: bev_count
+        synonyms:
+          - battery electric vehicles
+          - pure electric
+        description: Number of Battery Electric Vehicle (BEV) registrations.
+        expr: bev_count
+        default_aggregation: sum
+        data_type: NUMBER
+      - name: phev_count
+        synonyms:
+          - plug-in hybrid
+          - hybrid electric
+        description: Number of Plug-in Hybrid Electric Vehicle (PHEV) registrations.
+        expr: phev_count
+        default_aggregation: sum
+        data_type: NUMBER
+      - name: avg_range_miles
+        synonyms:
+          - average range
+          - electric range
+        description: Average electric range in miles.
+        expr: avg_range_miles
+        default_aggregation: avg
+        data_type: NUMBER
+      - name: avg_msrp
+        synonyms:
+          - average price
+          - msrp
+        description: Average base MSRP excluding zero values.
+        expr: avg_msrp
+        default_aggregation: avg
+        data_type: NUMBER
+      # ─── DERIVED METRIC: BEV share percentage ───
+      - name: bev_share_pct
+        synonyms:
+          - bev percentage
+          - battery electric share
+          - bev ratio
+        description: Percentage of registrations that are BEV (pure electric).
+        expr: "bev_count * 100.0 / NULLIF(registration_count, 0)"
+        default_aggregation: avg
+        data_type: NUMBER
+    # ─── FILTERS: Auto-suggested by Semantic View Autopilot ───
+    filters:
+      - name: top_wa_counties
+        description: Top 5 Washington State EV counties.
+        expr: "county IN ('King', 'Snohomish', 'Pierce', 'Clark', 'Thurston')"
+      - name: post_mandate_era
+        description: Only records from 2020 onwards (Post-Mandate era).
+        expr: "model_year >= 2020"
+
+  # ─── ROLE-PLAYING TABLE: Prior year comparison (SPLY) ───
+  - name: AGG_COUNTY_TRENDS_LY
+    description: >
+      Role-playing alias of AGG_COUNTY_TRENDS with a shifted model_year (+1)
+      to enable same-period-last-year (SPLY) comparisons. Join to AGG_COUNTY_TRENDS
+      on county + model_year to get prior year's registrations alongside current year.
+    base_table:
+      database: EV_PIPELINE
+      schema: GOLD
+      table: AGG_COUNTY_TRENDS
+    primary_key:
+      columns: [county, model_year_shifted]
+    dimensions:
+      - name: county
+        description: County (for join to current year).
+        expr: county
+        data_type: VARCHAR
+      - name: model_year_shifted
+        synonyms:
+          - comparison year
+          - target year
+        description: Model year + 1 (maps last year's data into current year's bucket for YoY comparison).
+        expr: "model_year + 1"
+        data_type: NUMBER
+    measures:
+      - name: registration_count_ly
+        synonyms:
+          - last year registrations
+          - prior year
+          - SPLY
+          - LY
+        description: Registration count from the prior year (same county).
+        expr: registration_count
+        default_aggregation: sum
+        data_type: NUMBER
+      - name: bev_count_ly
+        description: BEV count from the prior year.
+        expr: bev_count
+        default_aggregation: sum
+        data_type: NUMBER
+
+  - name: AGG_MAKE_SHARE
+    description: Market share data by vehicle manufacturer.
+    base_table:
+      database: EV_PIPELINE
+      schema: GOLD
+      table: AGG_MAKE_SHARE
+    dimensions:
+      - name: make
+        synonyms:
+          - manufacturer
+          - brand
+          - company
+        description: Vehicle manufacturer (e.g., Tesla, Nissan, BMW).
+        expr: make
+        data_type: VARCHAR
+    measures:
+      - name: total_registrations
+        synonyms:
+          - registrations
+          - total vehicles
+          - count
+        description: Total registrations for this manufacturer.
+        expr: total_registrations
+        default_aggregation: sum
+        data_type: NUMBER
+      - name: market_share_pct
+        synonyms:
+          - market share
+          - share percentage
+          - percent of market
+        description: Market share as a percentage of total registrations.
+        expr: market_share_pct
+        default_aggregation: avg
+        data_type: NUMBER
+      - name: model_count
+        synonyms:
+          - number of models
+          - models offered
+        description: Number of distinct vehicle models offered by this manufacturer.
+        expr: model_count
+        default_aggregation: sum
+        data_type: NUMBER
+      - name: avg_range_miles
+        description: Average electric range across all models from this manufacturer.
+        expr: avg_range_miles
+        default_aggregation: avg
+        data_type: NUMBER
+    filters:
+      - name: tesla_only
+        description: Filters to Tesla only.
+        expr: "make = 'TESLA'"
+
+  - name: AGG_UTILITY_DEMAND
+    description: EV demand by electric utility service territory.
+    base_table:
+      database: EV_PIPELINE
+      schema: GOLD
+      table: AGG_UTILITY_DEMAND
+    dimensions:
+      - name: electric_utility
+        synonyms:
+          - utility
+          - power company
+          - energy provider
+        description: Electric utility provider name.
+        expr: electric_utility
+        data_type: VARCHAR
+    measures:
+      - name: ev_count
+        synonyms:
+          - number of evs
+          - vehicles served
+        description: Total EVs in this utility's service territory.
+        expr: ev_count
+        default_aggregation: sum
+        data_type: NUMBER
+      - name: counties_served
+        synonyms:
+          - service area
+          - coverage
+        description: Number of counties in this utility's service territory.
+        expr: counties_served
+        default_aggregation: sum
+        data_type: NUMBER
+      - name: bev_count
+        description: Number of BEVs in this utility's territory.
+        expr: bev_count
+        default_aggregation: sum
+        data_type: NUMBER
+
+  - name: DIM_VEHICLE
+    description: Vehicle dimension with make, model, type, and specifications.
+    base_table:
+      database: EV_PIPELINE
+      schema: GOLD
+      table: DIM_VEHICLE
+    dimensions:
+      - name: make
+        description: Vehicle manufacturer.
+        expr: make
+        data_type: VARCHAR
+      - name: model
+        description: Vehicle model name.
+        expr: model
+        data_type: VARCHAR
+      - name: model_year
+        description: Model year of the vehicle.
+        expr: model_year
+        data_type: NUMBER
+      - name: ev_type
+        synonyms:
+          - vehicle type
+          - electric type
+          - bev or phev
+        description: "Electric vehicle type: Battery Electric Vehicle (BEV) or Plug-in Hybrid Electric Vehicle (PHEV)."
+        expr: ev_type
+        data_type: VARCHAR
+      - name: cafv_eligibility
+        synonyms:
+          - cafv
+          - incentive eligibility
+          - clean fuel eligible
+        description: Clean Alternative Fuel Vehicle eligibility status.
+        expr: cafv_eligibility
+        data_type: VARCHAR
+    measures:
+      - name: vehicle_count
+        description: Number of distinct vehicle configurations.
+        expr: "1"
+        default_aggregation: sum
+        data_type: NUMBER
+      - name: electric_range_miles
+        synonyms:
+          - range
+          - electric range
+          - miles per charge
+        description: Electric range in miles.
+        expr: electric_range_miles
+        default_aggregation: avg
+        data_type: NUMBER
+    filters:
+      - name: bev_vehicles_only
+        description: Filters to Battery Electric Vehicles only, excluding PHEVs.
+        expr: "ev_type LIKE '%BEV%'"
+
+# ─── RELATIONSHIPS: Enable cross-table joins ───
+relationships:
+  - name: county_trends_yoy
+    left_table: AGG_COUNTY_TRENDS_LY
+    right_table: AGG_COUNTY_TRENDS
+    relationship_columns:
+      - left_column: model_year_shifted
+        right_column: model_year
+      - left_column: county
+        right_column: county
+
+verified_queries:
+  - name: total_ev_registrations
+    question: How many total EV registrations are there?
+    sql: SELECT SUM(registration_count) AS total_registrations FROM EV_PIPELINE.GOLD.AGG_COUNTY_TRENDS
+    verified_by: Shashi Makkapati
+    verified_at: 1785964800
+  - name: top_counties
+    question: Which counties have the most EV registrations?
+    sql: SELECT county, SUM(registration_count) AS total FROM EV_PIPELINE.GOLD.AGG_COUNTY_TRENDS GROUP BY county ORDER BY total DESC LIMIT 10
+    verified_by: Shashi Makkapati
+    verified_at: 1785964800
+  - name: tesla_market_share
+    question: What is Tesla's market share?
+    sql: SELECT make, total_registrations, market_share_pct FROM EV_PIPELINE.GOLD.AGG_MAKE_SHARE WHERE make = 'TESLA'
+    verified_by: Shashi Makkapati
+    verified_at: 1785964800
+  - name: bev_vs_phev
+    question: What is the split between BEV and PHEV vehicles?
+    sql: "SELECT CASE WHEN ev_type LIKE '%BEV%' THEN 'BEV' ELSE 'PHEV' END AS type, COUNT(*) AS count FROM EV_PIPELINE.GOLD.DIM_VEHICLE GROUP BY 1"
+    verified_by: Shashi Makkapati
+    verified_at: 1785964800
+  - name: yoy_growth
+    question: What is the year-over-year growth in EV registrations?
+    sql: >
+      SELECT c.county, c.model_year, SUM(c.registration_count) AS current_year,
+             SUM(ly.registration_count) AS prior_year,
+             ROUND((SUM(c.registration_count) - SUM(ly.registration_count)) * 100.0
+                   / NULLIF(SUM(ly.registration_count), 0), 1) AS yoy_growth_pct
+      FROM EV_PIPELINE.GOLD.AGG_COUNTY_TRENDS c
+      LEFT JOIN EV_PIPELINE.GOLD.AGG_COUNTY_TRENDS ly
+        ON c.county = ly.county AND c.model_year = ly.model_year + 1
+      WHERE c.model_year >= 2015
+      GROUP BY c.county, c.model_year
+      ORDER BY c.model_year DESC, current_year DESC
+      LIMIT 20
+    verified_by: Shashi Makkapati
+    verified_at: 1785964800
+  - name: top_utilities
+    question: Which electric utilities serve the most EVs?
+    sql: SELECT electric_utility, ev_count FROM EV_PIPELINE.GOLD.AGG_UTILITY_DEMAND ORDER BY ev_count DESC LIMIT 10
+    verified_by: Shashi Makkapati
+    verified_at: 1785964800
+  - name: cafv_eligibility
+    question: What percentage of EVs are eligible for CAFV incentives?
+    sql: "SELECT cafv_eligibility, COUNT(*) AS count, ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) AS pct FROM EV_PIPELINE.GOLD.DIM_VEHICLE GROUP BY cafv_eligibility ORDER BY count DESC"
+    verified_by: Shashi Makkapati
+    verified_at: 1785964800
+  - name: range_over_time
+    question: How has average electric range improved over the years?
+    sql: SELECT model_year, ROUND(AVG(avg_range_miles), 1) AS avg_range FROM EV_PIPELINE.GOLD.AGG_COUNTY_TRENDS WHERE model_year >= 2011 AND avg_range_miles > 0 GROUP BY model_year ORDER BY model_year
+    verified_by: Shashi Makkapati
+    verified_at: 1785964800
+  # ─── NEW: Time intelligence verified queries ───
+  - name: registrations_by_era
+    question: How many registrations are in each adoption era?
+    sql: >
+      SELECT CASE WHEN model_year >= 2020 THEN 'Post-Mandate'
+                  WHEN model_year >= 2015 THEN 'Growth Era'
+                  ELSE 'Early Adoption' END AS adoption_era,
+             SUM(registration_count) AS total
+      FROM EV_PIPELINE.GOLD.AGG_COUNTY_TRENDS
+      GROUP BY 1
+      ORDER BY total DESC
+    verified_by: Shashi Makkapati
+    verified_at: 1785964800
+  - name: king_county_yoy_comparison
+    question: Compare King County registrations to last year
+    sql: >
+      SELECT c.model_year, SUM(c.registration_count) AS current_year,
+             SUM(ly.registration_count) AS prior_year,
+             ROUND((SUM(c.registration_count) - SUM(ly.registration_count)) * 100.0
+                   / NULLIF(SUM(ly.registration_count), 0), 1) AS yoy_growth_pct
+      FROM EV_PIPELINE.GOLD.AGG_COUNTY_TRENDS c
+      LEFT JOIN EV_PIPELINE.GOLD.AGG_COUNTY_TRENDS ly
+        ON c.county = ly.county AND c.model_year = ly.model_year + 1
+      WHERE c.county = 'King'
+      GROUP BY c.model_year
+      ORDER BY c.model_year DESC
+    verified_by: Shashi Makkapati
+    verified_at: 1785964800

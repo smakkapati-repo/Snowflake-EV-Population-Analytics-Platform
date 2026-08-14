@@ -1,0 +1,56 @@
+# This yaml file is responsible for configuring built-in Pipeline Quality Rules.
+# For more information on the yaml schema and specific rule configurations, see the documentation: 
+# https://docs.maia.ai/docs/guides/pipeline-quality/.
+
+rules:
+# Checks pipeline has more than the minimum number of components specified in the config
+- id: "minimum-components"
+  enabled: true
+  enforcementLevel: "warn"
+  config:
+    minComponents: 1
+
+# Checks pipeline has less than the maximum number of components specified in the config
+- id: "maximum-components"
+  enabled: true
+  enforcementLevel: "warn"
+  config:
+    maxComponents: 10
+
+# Checks all component names in the pipeline conform to the regex specified in the config
+- id: "component-naming-convention"
+  enabled: true
+  enforcementLevel: "warn"
+  config:
+    regexMatchPattern: ".*"
+
+# Checks there are no unused components in the pipeline
+- id: "unused-components"
+  enabled: true
+  enforcementLevel: "warn"
+
+# Checks copied variables are only used within concurrent mode iterators' iteration variable parameter
+- id: "copied-variables"
+  enabled: true
+  enforcementLevel: "warn"
+
+# orchestration only rules:
+
+# Checks an orchestration pipeline contains a Start component and End Success / End Failure components on the end of every branch
+- id: "start-and-end-components"
+  enabled: true
+  enforcementLevel: "warn"
+
+# transformation only rules:
+
+# Checks a transformation pipeline contains a maximum number of output components 
+- id: "maximum-outputs"
+  enabled: true
+  enforcementLevel: "warn"
+  config:
+    maxOutputs: 1
+
+# Checks a transformation pipeline contains an output component on the end of every branch
+- id: "end-output-components"
+  enabled: true
+  enforcementLevel: "warn"
